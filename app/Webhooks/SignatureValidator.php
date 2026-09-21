@@ -16,44 +16,6 @@ class SignatureValidator implements SignatureValidatorContract
     /**
      * @throws InvalidConfig
      */
-//    public function isValid(Request $request, WebhookConfig $config): bool
-//    {
-//        Log::info('CUSTOM SIGNATURE VALIDATOR CALLED');
-//
-//        $signature = $request->header($config->signatureHeaderName);
-//
-//        if (! $signature) {
-//            return false;
-//        }
-//
-//        $timestamp = $request->header('timestamp');
-//
-//        if (! $timestamp) {
-//            return false;
-//        }
-//
-//        $signingSecret = $config->signingSecret;
-//
-//        if (empty($signingSecret)) {
-//            throw InvalidConfig::signingSecretNotSet();
-//        }
-//
-//        $payload = $request->getContent();
-//
-//        $computedSignature = hash_hmac(
-//            'sha256',
-//            $timestamp . $payload,
-//            $signingSecret
-//        );
-//        $isValid = hash_equals($computedSignature, $signature);
-//
-//        Log::info('Webhook signature result', [
-//            'is_valid' => $isValid,
-//        ]);
-//
-//        return hash_equals($computedSignature, $signature);
-//    }
-
 
     public function isValid(Request $request, WebhookConfig $config): bool
     {

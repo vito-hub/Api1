@@ -18,6 +18,7 @@ class ProcessWebhookJob extends SpatieProcessWebhookJob implements ShouldQueue
 
         match ($eventType) {
             'user.created' => $this->handleUserCreated($payload),
+            'user.updated' => $this->handleUserUpdate($payload),
             default => $this->handleUnknownEvent($eventType),
         };
     }
@@ -27,18 +28,28 @@ class ProcessWebhookJob extends SpatieProcessWebhookJob implements ShouldQueue
         $data = $payload['data'] ?? [];
 
         logger()->info('user.created webhook processed.', [
-            'webhook_call_id' => $this->webhookCall->id,
-            'event_id' => $payload['id'] ?? null,
-            'user_id' => $data['user_id'] ?? null,
+            'webhook_call_id'   => $this->webhookCall->id,
+            'event_id'          => $payload['id'] ?? null,
+            'user_id'           => $data['user_id'] ?? null,
         ]);
 
+    }
+    private function handleUserUpdate(array $payload): void
+    {
+        $data = $payload['data'] ?? [];
+
+        logger()->info('user.created webhook processed.', [
+            'webhook_call_id'   => $this->webhookCall->id,
+            'event_id'          => $payload['id'] ?? null,
+            'user_id'           => $data['user_id'] ?? null,
+        ]);
     }
 
     private function handleUnknownEvent(?string $eventType): void
     {
         logger()->warning('Unknown webhook event received.', [
-            'event_type' => $eventType,
-            'webhook_call_id' => $this->webhookCall->id,
+            'event_type'        => $eventType,
+            'webhook_call_id'   => $this->webhookCall->id,
         ]);
     }
 }

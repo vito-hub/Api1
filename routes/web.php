@@ -41,5 +41,6 @@ Route::middleware('auth')->group(function () {
 
 });
 
-Route::webhooks('myWebhook');
+Route::webhooks('myWebhook', 'user-created');
+Route::webhooks('webhook-user-updated', 'user-updated');
 
