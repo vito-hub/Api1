@@ -3,31 +3,52 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Oidc\OidcTokenVerifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Random\RandomException;
 
 class OAuthController extends Controller
 {
+    public function __construct(
+        protected OidcTokenVerifier $OidcTokenVerifier,
+    ){
+        $this->OidcTokenVerifier = $OidcTokenVerifier;
+    }
+    /**
+     * @throws RandomException
+     */
     public function redirect(Request $request): \Illuminate\Http\RedirectResponse
     {
         $state = bin2hex(random_bytes(32));
+        $nonce = bin2hex(random_bytes(32));
 
         $codeVerifier = rtrim(
-            strtr(base64_encode(random_bytes(32)), '+/', '-_'),
+            strtr(
+                base64_encode(random_bytes(32)),
+                '+/',
+                '-_'
+            ),
             '='
         );
 
         $codeChallenge = rtrim(
             strtr(
-                base64_encode(hash('sha256', $codeVerifier, true)), '+/', '-_'),
+                base64_encode(
+                    hash('sha256', $codeVerifier, true)
+                ),
+                '+/',
+                '-_'
+            ),
             '='
         );
 
         $request->session()->put([
-            'oauth_state'           => $state,
-            'oauth_code_verifier'   => $codeVerifier,
+            'oauth_state'         => $state,
+            'oauth_nonce'         => $nonce,
+            'oauth_code_verifier' => $codeVerifier,
         ]);
 
         return redirect()->away(
@@ -37,32 +58,44 @@ class OAuthController extends Controller
                 'client_id'             => config('services.oauth.client_id'),
                 'redirect_uri'          => config('services.oauth.redirect_uri'),
                 'response_type'         => 'code',
-                'scope'                 => '',
+                'scope'                 => 'openid profile email user-read',
                 'state'                 => $state,
+                'nonce'                 => $nonce,
                 'code_challenge'        => $codeChallenge,
                 'code_challenge_method' => 'S256',
             ])
         );
     }
-
-    public function callback(Request $request): \Illuminate\Http\RedirectResponse
+    public function callback(Request $request): \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
     {
-        $expectedState = $request->session()->pull('oauth_state');
+        $expectedState  = $request->session()->pull('oauth_state');
+        $nonce          = $request->session()->pull('oauth_nonce');
+        $codeVerifier   = $request->session()->pull('oauth_code_verifier');
 
         if (
             !$expectedState ||
             !$request->filled('state') ||
-            !hash_equals($expectedState, $request->string('state')->toString())
+            !hash_equals(
+                $expectedState,
+                $request->string('state')->toString()
+            )
         ) {
             abort(419, 'Invalid OAuth state.');
         }
 
         if ($request->has('error')) {
-
-            abort(403, $request->get('error_description', 'OAuth authorization failed.'));
+            abort(
+                403,
+                $request->get(
+                    'error_description',
+                    'OAuth authorization failed.'
+                )
+            );
         }
 
-        $codeVerifier = $request->session()->pull('oauth_code_verifier');
+        if (!$nonce) {
+            abort(419, 'OAuth nonce is missing.');
+        }
 
         if (!$codeVerifier) {
             abort(419, 'OAuth code verifier is missing.');
@@ -81,12 +114,15 @@ class OAuthController extends Controller
                 'redirect_uri'  => config('services.oauth.redirect_uri'),
                 'code'          => $request->code,
                 'code_verifier' => $codeVerifier,
+                'nonce'         => $nonce,
             ]
-
         );
 
         if ($tokenResponse->failed()) {
-            abort(500, 'OAuth token exchange failed.');
+            return response()->json([
+                'message' => 'Token unauthorized',
+                'response' => $tokenResponse->json(),
+            ], 401);
         }
 
         $tokens = $tokenResponse->json();
@@ -95,24 +131,17 @@ class OAuthController extends Controller
             abort(401, 'OAuth access token was not returned.');
         }
 
-        $userResponse = Http::withToken($tokens['access_token'])->get(
-            config('services.oauth.auth_server') . '/api/user'
-        );
-
-        if ($userResponse->failed()) {
-            abort(500, 'Unable to retrieve authenticated user.');
-        }
-
-        $authUser = $userResponse->json()['data'];
+        $userRespone = $this->OidcTokenVerifier->verify($tokens['id_token'],$nonce);
 
         $user = User::updateOrCreate(
             [
-                'auth_user_id' => $authUser['aspu_id'],
+                'auth_user_id' => $userRespone->sub,
             ],
             [
-                'name'  => $authUser['name'],
-                'phone' => $authUser['phone'],
-                'email' => $authUser['email'] ?? null,
+                'name'              => $userRespone->name,
+                'phone'             => $userRespone->phone,
+                'email'             => $userRespone->email ?? null,
+                'email_verified_at' => $userRespone->email_verified_at ?? null,
             ]
         );
 
@@ -152,11 +181,25 @@ class OAuthController extends Controller
     public function getUserData()
     {
         $user = Auth::user();
-
         $token = $user->oauthTokens()->where('client_id' , config('services.oauth.client_id'))->first();
 
-        $response = Http::withToken($token['access_token'])->get(config('services.oauth.auth_server') . '/api/user');
+        $response = Http::withBasicAuth(
+            config('services.oauth.client_id'),
+            config('services.oauth.client_secret')
+        )
+            ->asForm()
+            ->post(
+                config('services.oauth.auth_server') . '/api/oauth/introspect',
+                [
+                    'token' => $token->access_token,
+                ]
+            );
 
-        dd($user);
+        dd([
+            'status'     => $response->status(),
+            'body'       => $response->body(),
+            'response'   =>  $response
+        ]);
+
     }
 }

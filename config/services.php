@@ -34,11 +34,13 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+
     'oauth' => [
-        'auth_server'       => env('OAUTH_AUTH_SERVER'),
-        'client_id'         => env('OAUTH_CLIENT_ID'),
-        'client_secret'     => env('OAUTH_CLIENT_SECRET'),
-        'redirect_uri'      => env('OAUTH_REDIRECT_URI'),
+        'auth_server'   => env('OAUTH_AUTH_SERVER'),
+        'issuer'        => env('OAUTH_ISSUER'),
+        'client_id'     => env('OAUTH_CLIENT_ID'),
+        'client_secret' => env('OAUTH_CLIENT_SECRET'),
+        'redirect_uri'  => env('OAUTH_REDIRECT_URI'),
     ],
 
 ];

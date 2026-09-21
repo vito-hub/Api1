@@ -40,3 +40,6 @@ Route::middleware('auth')->group(function () {
     Route::get('/test', [OauthController::class, 'getUserData'])->name('test');
 
 });
+
+Route::webhooks('myWebhook');
+
